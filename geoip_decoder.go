@@ -16,13 +16,11 @@
 package geoip2
 
 import (
-        "bytes"
         "errors"
         "fmt"
         "github.com/oschwald/geoip2-golang"
         "github.com/mozilla-services/heka/message"
         . "github.com/mozilla-services/heka/pipeline"
-        "strconv"
         "net"
 )
 
@@ -79,84 +77,7 @@ func (ld *GeoIpDecoder) Init(config interface{}) (err error) {
         return
 }
 
-func (ld *GeoIpDecoder) GetRecord(ip string) *geoip.GeoIPRecord {
-        return ld.gi.GetRecord(ip)
-}
-
-func (ld *GeoIpDecoder) GeoBuff(rec *geoip.GeoIPRecord) bytes.Buffer {
-        buf := bytes.Buffer{}
-
-        latitudeString := strconv.FormatFloat(float64(rec.Latitude), 'g', 16, 32)
-        longitudeString := strconv.FormatFloat(float64(rec.Longitude), 'g', 16, 32)
-        areacodeString := strconv.FormatInt(int64(rec.AreaCode), 10)
-        charsetString := strconv.FormatInt(int64(rec.CharSet), 10)
-
-        buf.WriteString(`{`)
-
-        buf.WriteString(`"latitude":`)
-        buf.WriteString(latitudeString)
-
-        buf.WriteString(`,"longitude":`)
-        buf.WriteString(longitudeString)
-
-        buf.WriteString(`,"location":[`)
-        buf.WriteString(longitudeString)
-        buf.WriteString(`,`)
-        buf.WriteString(latitudeString)
-        buf.WriteString(`]`)
-
-        buf.WriteString(`,"coordinates":["`)
-        buf.WriteString(longitudeString)
-        buf.WriteString(`","`)
-        buf.WriteString(latitudeString)
-        buf.WriteString(`"]`)
-
-        buf.WriteString(`,"countrycode":"`)
-        buf.WriteString(rec.CountryCode)
-        buf.WriteString(`"`)
-
-        buf.WriteString(`,"countrycode3":"`)
-        buf.WriteString(rec.CountryCode3)
-        buf.WriteString(`"`)
-
-        buf.WriteString(`,"countryname":"`)
-        buf.WriteString(rec.CountryName)
-        buf.WriteString(`"`)
-
-        buf.WriteString(`,"region":"`)
-        buf.WriteString(rec.Region)
-        buf.WriteString(`"`)
-
-        buf.WriteString(`,"city":"`)
-        buf.WriteString(rec.City)
-        buf.WriteString(`"`)
-
-        buf.WriteString(`,"postalcode":"`)
-        buf.WriteString(rec.PostalCode)
-        buf.WriteString(`"`)
-
-        buf.WriteString(`,"areacode":`)
-        buf.WriteString(areacodeString)
-
-        buf.WriteString(`,"charset":`)
-        buf.WriteString(charsetString)
-
-        buf.WriteString(`,"continentcode":"`)
-        buf.WriteString(rec.ContinentCode)
-        buf.WriteString(`"`)
-
-        buf.WriteString(`}`)
-
-        return buf
-}
-
-func (ld *GeoIpDecoder) GetRecord(ip net.IP) (geoip2.City, err) {
-        ip,err := net.LookupIP(host)
-        if err != nil {
-}
-
-func (ld *GeoIpDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, err error) {
-        var buf bytes.Buffer
+func (ld *GeoIpDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, fail error) {
         var hostAddr, _ = pack.Message.GetFieldValue(ld.SourceHostField)
 
         host, ok := hostAddr.(string)
@@ -175,19 +96,18 @@ func (ld *GeoIpDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, err e
         }       
 
         if ld.db != nil {
-                rec := ld.gi.GetRecord(ip)
-                if rec != nil {
-                        buf = ld.GeoBuff(rec)
-                } else {
+                //We only check the first IP returned from the local resolver
+                //TODO implement a configuration option to allow checking all IPs
+                rec, err := ld.db.City(ips[0])
+                if err != nil {
                         // IP address did not return a valid GeoIp record but that's ok sometimes(private ip?). Return without error.
                         packs = []*PipelinePack{pack}
                         return
                 }
-        }
+                location := []float64{rec.Location.Latitude, rec.Location.Longitude}
 
-        if buf.Len() > 0 {
                 var nf *message.Field
-                nf, err = message.NewField(ld.TargetField, buf.Bytes(), "")
+                nf, err = message.NewField(ld.TargetField, location, "")
                 pack.Message.AddField(nf)
         }
 
@@ -201,4 +121,3 @@ func init() {
                 return new(GeoIpDecoder)
         })
 }
-
