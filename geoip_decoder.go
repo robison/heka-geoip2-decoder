@@ -22,18 +22,27 @@ import (
         "github.com/mozilla-services/heka/message"
         . "github.com/mozilla-services/heka/pipeline"
         "net"
+        "bytes"
+        "strconv"
 )
 
 type GeoIpDecoderConfig struct {
         DatabaseFile  string `toml:"db_file"`
         SourceHostField string `toml:"source_host_field"`
-        TargetField   string `toml:"target_field"`
+        TargetField   string `toml:"target_field_prefix"`
+        //When true, all the location info is put into a separate
+        //JSON object. The "target_field_prefix" is the name of the field
+        //that will contain the raw bytes of the object.
+        //When false (the default), all the info is put into separate
+        //fields with the prefix "target_field_prefix"
+        JSONObject   bool `toml:"raw_json_object"`
 }
 
 type GeoIpDecoder struct {
         DatabaseFile  string
         SourceHostField string
         TargetField   string
+        JSONObject bool
         db            *geoip2.Reader
         pConfig       *PipelineConfig
 }
@@ -66,12 +75,86 @@ func (ld *GeoIpDecoder) Init(config interface{}) (err error) {
 
         ld.TargetField = conf.TargetField
         ld.SourceHostField = conf.SourceHostField
+        ld.JSONObject = conf.JSONObject
 
         if ld.db == nil {
                 ld.db, err = geoip2.Open(conf.DatabaseFile)
         }
         if err != nil {
                 return fmt.Errorf("Could not open GeoIP database: %s\n")
+        }
+
+        return
+}
+
+//Creates new Heka Message fields for the following location info
+//(if they are contained in the record): location coordinates,
+//country ISO code, country name in English, city name in English
+func (ld *GeoIpDecoder) CreateMessageFields(record *geoip2.City, pack *PipelinePack) (err error) {
+        countrycode := record.Country.IsoCode
+        country := record.Country.Names["en"]
+        city := record.City.Names["en"]
+
+        lat := strconv.FormatFloat(record.Location.Latitude,'g', 16, 32)
+        lon := strconv.FormatFloat(record.Location.Longitude,'g', 16, 32)
+
+        if ld.JSONObject {
+                buf := bytes.Buffer{}
+                buf.WriteString(`{`)
+
+                buf.WriteString(`"location":[`)
+                buf.WriteString(lon)
+                buf.WriteString(`,`)
+                buf.WriteString(lat)
+                buf.WriteString(`]`)
+
+                if countrycode != "" {
+                        buf.WriteString(`,"country_code":"`)
+                        buf.WriteString(countrycode)
+                        buf.WriteString(`"`)
+                }
+                if country != "" {
+                        buf.WriteString(`,"country":"`)
+                        buf.WriteString(country)
+                        buf.WriteString(`"`)
+                }
+                if city != "" {
+                        buf.WriteString(`,"city":"`)
+                        buf.WriteString(city)
+                        buf.WriteString(`"`)
+                }
+
+                buf.WriteString(`}`)
+
+                var nf *message.Field
+                nf, err = message.NewField(ld.TargetField, buf.Bytes(), "")
+                pack.Message.AddField(nf)
+        } else {
+                var nf *message.Field
+                nf, err = message.NewField(
+                        fmt.Sprintf("%s_location",ld.TargetField),
+                        fmt.Sprintf("%s,%s",lat,lon),"")
+                pack.Message.AddField(nf)
+
+                if countrycode != "" {
+                        nf, err = message.NewField(
+                                fmt.Sprintf("%s_countrycode",ld.TargetField),
+                                countrycode, "")
+                        pack.Message.AddField(nf)
+                }
+                if country != "" {
+                        nf, err = message.NewField(
+                                fmt.Sprintf("%s_country",ld.TargetField),
+                                country, "")
+                        pack.Message.AddField(nf)
+                }
+                if city != "" {
+                        nf, err = message.NewField(
+                                fmt.Sprintf("%s_city",ld.TargetField),
+                                city, "")
+                        pack.Message.AddField(nf)
+                }
+
         }
 
         return
@@ -104,11 +187,7 @@ func (ld *GeoIpDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, fail 
                         packs = []*PipelinePack{pack}
                         return
                 }
-                location := []float64{rec.Location.Latitude, rec.Location.Longitude}
-
-                var nf *message.Field
-                nf, err = message.NewField(ld.TargetField, location, "")
-                pack.Message.AddField(nf)
+                ld.CreateMessageFields(rec, pack)
         }
 
         packs = []*PipelinePack{pack}
