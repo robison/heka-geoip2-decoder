@@ -130,10 +130,20 @@ func (ld *GeoIpDecoder) CreateMessageFields(record *geoip2.City, pack *PipelineP
                 nf, err = message.NewField(ld.TargetField, buf.Bytes(), "")
                 pack.Message.AddField(nf)
         } else {
+                //Since Heka message cannot have an array as a field
+                //value, we encode the [lon,lat] JSON array directly
+                //as bytes
+                buf := bytes.Buffer{}
+                buf.WriteString(`[`)
+                buf.WriteString(lon)
+                buf.WriteString(`,`)
+                buf.WriteString(lat)
+                buf.WriteString(`]`)
+
                 var nf *message.Field
                 nf, err = message.NewField(
                         fmt.Sprintf("%s_location",ld.TargetField),
-                        fmt.Sprintf("%s,%s",lat,lon),"")
+                        buf.Bytes(),"")
                 pack.Message.AddField(nf)
 
                 if countrycode != "" {
