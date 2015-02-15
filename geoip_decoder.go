@@ -192,7 +192,8 @@ func (ld *GeoIpDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, fail 
                 //We only check the first IP returned from the local resolver
                 //TODO implement a configuration option to allow checking all IPs
                 rec, err := ld.db.City(ips[0])
-                if err != nil {
+                if err != nil || 
+                (rec.Location.Longitude == 0.0 && rec.Location.Latitude == 0.0){
                         // IP address did not return a valid GeoIp record but that's ok sometimes(private ip?). Return without error.
                         packs = []*PipelinePack{pack}
                         return
