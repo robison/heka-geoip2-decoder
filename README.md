@@ -7,6 +7,34 @@ It has the following benefits over the official plugin:
 * supports hostname lookups
 * somewhat configurable output
 
-# Dependencies
+## Dependencies
 * https://github.com/oschwald/geoip2-golang
+
+## Configuraton
+* **db_file**
+The location of the GeoLite2-City.mmdb database. Defaults to {HEKA_SHARE_DIR}/GeoLite2-City.mmdb
+* **source_host_field**
+The message field containing the hostname or IP to be looked up
+* **target_field_prefix**
+The prefix for all the new fields created by the decoder or the name
+of the field containing the JSON object (see raw_json_object)
+* **raw_json_object**
+When true, all the location info is put into a separate JSON object. The "target_field_prefix" is the name of the field that will contain the raw bytes of the object. When false (the default), all the info is put into separate
+fields with the prefix "target_field_prefix"
+* **dns_lookup**
+If true, it will do a DNS lookup on the string contained in "source_host_field" otherwise it will consider the contents of "source_host_field" to be an IP address (default)
+
+## Example
+```
+[GeoIp2Decoder]
+db_file = "/var/cache/GeoLite2-City.mmdb
+source_host_field = "remote_addr"
+target_field_prefix = "geoip"
+dns_lookup = false
+```
+
+## Installation
+In order to use the plugin you have to recompile Heka, as all Go plugins have to be compiled into it because of Go binaries being *mostly* statically linked. You can refer to the instructions here: http://hekad.readthedocs.org/en/v0.8.2/installing.html#build-include-externals
+
+
 
