@@ -39,7 +39,7 @@ In order to use the plugin you have to recompile Heka, as all Go plugins have to
 * In the source root directory edit (or create) the cmake/plugin_loader.cmake file and add
 `add_external_plugin(git https://github.com/mart1nl/heka-geoip2-decoder master)`
 * Then add the needed extra packages' get into build.sh right before `make`
-`go get github.com/oschwald/geoip2-golang`
+* `go get github.com/oschwald/geoip2-golang`
 
 
 
