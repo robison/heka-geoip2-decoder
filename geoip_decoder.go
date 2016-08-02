@@ -10,60 +10,60 @@
 # Contributor(s):
 #   Michael Gibson (michael.gibson79@gmail.com)
 #   Rob Miller (rmiller@mozilla.com)
-#
+#   Robbie Jacka (robbie@weebly.com)
 # ***** END LICENSE BLOCK *****/
 
 package geoip2
 
 import (
+        "bytes"
         "fmt"
-        "github.com/oschwald/geoip2-golang"
         "github.com/mozilla-services/heka/message"
         . "github.com/mozilla-services/heka/pipeline"
+        "github.com/oschwald/geoip2-golang"
         "net"
-        "bytes"
         "strconv"
 )
 
 type GeoIp2Decoder struct {
-        AnonDatabaseFile      string
-        CityDatabaseFile      string
-        ConnDatabaseFile      string
-        ISPDatabaseFile       string
-        SourceAddrFields      []string
-        TargetField           string
-        Language              string
-        JSONObject            bool
-        DNSLookup             bool
-        anon_db               *geoip2.Reader
-        city_db               *geoip2.Reader
-        conn_db               *geoip2.Reader
-        isp_db                *geoip2.Reader
-        Config                *GeoIp2DecoderConfig
-        pConfig               *PipelineConfig
+        AnonDatabaseFile string
+        CityDatabaseFile string
+        ConnDatabaseFile string
+        ISPDatabaseFile  string
+        SourceAddrFields []string
+        TargetField      string
+        Language         string
+        JSONObject       bool
+        DNSLookup        bool
+        anon_db          *geoip2.Reader
+        city_db          *geoip2.Reader
+        conn_db          *geoip2.Reader
+        isp_db           *geoip2.Reader
+        Config           *GeoIp2DecoderConfig
+        pConfig          *PipelineConfig
 }
 
 type GeoIp2DecoderConfig struct {
-        AnonDatabaseFile   string   `toml:"db_anon"`
-        CityDatabaseFile   string   `toml:"db_city"`
-        ConnDatabaseFile   string   `toml:"db_conn"`
-        ISPDatabaseFile    string   `toml:"db_isp"`
-        SourceAddrFields   []string `toml:"source_addr_fields"`
-        TargetField        string   `toml:"target_field_prefix"`
-        Language           string   `toml:"language"`
+        AnonDatabaseFile string   `toml:"db_anon"`
+        CityDatabaseFile string   `toml:"db_city"`
+        ConnDatabaseFile string   `toml:"db_conn"`
+        ISPDatabaseFile  string   `toml:"db_isp"`
+        SourceAddrFields []string `toml:"source_addr_fields"`
+        TargetField      string   `toml:"target_field_prefix"`
+        Language         string   `toml:"language"`
 
         // When true, all the location info is put into a separate
         // JSON object. The "target_field_prefix" is the name of the field
         // that will contain the raw bytes of the object.
         // When false (the default), all the info is put into separate
         // fields with the prefix "target_field_prefix"
-        JSONObject         bool `toml:"raw_json_object"`
+        JSONObject bool `toml:"raw_json_object"`
 
         // If true, it will do a DNS lookup on the string contained
         // in "source_host_field".
         // When false, it will consider the contents
         // of "source_host_field" to be a IP address (default)
-        DNSLookup          bool `toml:"dns_lookup"`
+        DNSLookup bool `toml:"dns_lookup"`
 }
 
 // Heka will call this before calling any other methods to give us access to
@@ -77,10 +77,10 @@ func (gi2 *GeoIp2Decoder) ConfigStruct() interface{} {
         safs := make([]string, 1)
         safs[0] = "remote_addr"
         return &GeoIp2DecoderConfig{
-                CityDatabaseFile:      globals.PrependShareDir("GeoLite2-City.mmdb"),
-                SourceAddrFields:      safs,
-                TargetField:           "geoip",
-                Language:              "en",
+                CityDatabaseFile: globals.PrependShareDir("GeoLite2-City.mmdb"),
+                SourceAddrFields: safs,
+                TargetField:      "geoip",
+                Language:         "en",
         }
 }
 
@@ -101,10 +101,10 @@ func (gi2 *GeoIp2Decoder) Init(config interface{}) (err error) {
                 gi2.LogError(fmt.Errorf("`target_field` must be specified"))
         }
 
-        gi2.DNSLookup          = gi2.Config.DNSLookup
-        gi2.JSONObject         = gi2.Config.JSONObject
-        gi2.Language           = gi2.Config.Language
-        gi2.TargetField        = gi2.Config.TargetField
+        gi2.DNSLookup = gi2.Config.DNSLookup
+        gi2.JSONObject = gi2.Config.JSONObject
+        gi2.Language = gi2.Config.Language
+        gi2.TargetField = gi2.Config.TargetField
 
         if gi2.anon_db == nil && gi2.Config.AnonDatabaseFile != "" {
                 gi2.anon_db, err = geoip2.Open(gi2.Config.AnonDatabaseFile)
@@ -139,11 +139,11 @@ func (gi2 *GeoIp2Decoder) Init(config interface{}) (err error) {
 //country ISO code, country name in English, city name in English
 func (gi2 *GeoIp2Decoder) CreateMessageFieldsCity(record *geoip2.City, pack *PipelinePack) (err error) {
         countrycode := record.Country.IsoCode
-        country     := record.Country.Names[gi2.Language]
-        city        := record.City.Names[gi2.Language]
+        country := record.Country.Names[gi2.Language]
+        city := record.City.Names[gi2.Language]
 
-        lat := strconv.FormatFloat(record.Location.Latitude,'g', 16, 32)
-        lon := strconv.FormatFloat(record.Location.Longitude,'g', 16, 32)
+        lat := strconv.FormatFloat(record.Location.Latitude, 'g', 16, 32)
+        lon := strconv.FormatFloat(record.Location.Longitude, 'g', 16, 32)
 
         if gi2.JSONObject {
                 buf := bytes.Buffer{}
@@ -175,16 +175,16 @@ func (gi2 *GeoIp2Decoder) CreateMessageFieldsCity(record *geoip2.City, pack *Pip
 
                 gi2.AddField(pack, gi2.TargetField, buf.Bytes())
         } else {
-                gi2.AddField(pack, fmt.Sprintf("%s_location",gi2.TargetField), fmt.Sprintf("%s, %s", lat, lon))
+                gi2.AddField(pack, fmt.Sprintf("%s_location", gi2.TargetField), fmt.Sprintf("%s, %s", lat, lon))
 
                 if countrycode != "" {
-                        gi2.AddField(pack, fmt.Sprintf("%s_country_code",gi2.TargetField), countrycode)
+                        gi2.AddField(pack, fmt.Sprintf("%s_country_code", gi2.TargetField), countrycode)
                 }
                 if country != "" {
-                        gi2.AddField(pack, fmt.Sprintf("%s_country",gi2.TargetField), country)
+                        gi2.AddField(pack, fmt.Sprintf("%s_country", gi2.TargetField), country)
                 }
                 if city != "" {
-                        gi2.AddField(pack, fmt.Sprintf("%s_city",gi2.TargetField), city)
+                        gi2.AddField(pack, fmt.Sprintf("%s_city", gi2.TargetField), city)
                 }
         }
 
@@ -192,10 +192,10 @@ func (gi2 *GeoIp2Decoder) CreateMessageFieldsCity(record *geoip2.City, pack *Pip
 }
 
 func (gi2 *GeoIp2Decoder) CreateMessageFieldsISP(record *geoip2.ISP, pack *PipelinePack) (err error) {
-        asnum          := record.AutonomousSystemNumber
-        asname         := record.AutonomousSystemOrganization
-        isp            := record.ISP
-        organization   := record.Organization
+        asnum := record.AutonomousSystemNumber
+        asname := record.AutonomousSystemOrganization
+        isp := record.ISP
+        organization := record.Organization
 
         if gi2.JSONObject {
                 buf := bytes.Buffer{}
@@ -244,9 +244,9 @@ func (gi2 *GeoIp2Decoder) CreateMessageFieldsISP(record *geoip2.ISP, pack *Pipel
 }
 
 func (gi2 *GeoIp2Decoder) CreateMessageFieldsAnonymousIP(record *geoip2.AnonymousIP, pack *PipelinePack) (err error) {
-        anon        := record.IsAnonymous
-        anonvpn     := record.IsAnonymousVPN
-        hostingpro  := record.IsHostingProvider
+        anon := record.IsAnonymous
+        anonvpn := record.IsAnonymousVPN
+        hostingpro := record.IsHostingProvider
         publicproxy := record.IsPublicProxy
         torexitnode := record.IsTorExitNode
 
@@ -329,28 +329,29 @@ func (gi2 *GeoIp2Decoder) Decode(pack *PipelinePack) (packs []*PipelinePack, fai
                 host, ok := hostValue.(string)
 
                 if !ok {
-                        // IP field was not a string. Field could just be blank. Continue processing in loop.
+                        // IP field was not a string. Field could just be blank. Return without error.
                         continue
                 }
 
                 if gi2.DNSLookup {
-                    ips, err := net.LookupIP(host)
-                    if err != nil {
-                            // Could not get an IP for the host, can happen. Continue processing in loop.
-                            continue
-                    }
-                    ip = ips[0]
+                        ips, err := net.LookupIP(host)
+                        if err == nil {
+                                // Could not get an IP for the host, can happen.
+                                continue
+                        }
+                        ip = ips[0]
                 } else {
-                    ip = net.ParseIP(host)
-                    if ip == nil {
-                            // Not a valid IP address in the host string. Continue processing in loop.
-                            continue
-                    }
+                        ip = net.ParseIP(host)
+                        if ip == nil {
+                                //Not a valid IP address in the host string, still we don't
+                                //want to send an error
+                                continue
+                        }
                 }
                 if gi2.anon_db != nil {
                         rec, err := gi2.anon_db.AnonymousIP(ip)
                         if err == nil &&
-                        (rec.IsAnonymous || rec.IsAnonymousVPN || rec.IsHostingProvider || rec.IsPublicProxy || rec.IsTorExitNode){
+                                (rec.IsAnonymous || rec.IsAnonymousVPN || rec.IsHostingProvider || rec.IsPublicProxy || rec.IsTorExitNode) {
                                 found = true
                                 gi2.CreateMessageFieldsAnonymousIP(rec, pack)
                         }
@@ -358,7 +359,7 @@ func (gi2 *GeoIp2Decoder) Decode(pack *PipelinePack) (packs []*PipelinePack, fai
                 if gi2.city_db != nil {
                         rec, err := gi2.city_db.City(ip)
                         if err == nil &&
-                        (rec.Location.Longitude != 0.0 && rec.Location.Latitude != 0.0){
+                                (rec.Location.Longitude != 0.0 && rec.Location.Latitude != 0.0) {
                                 found = true
                                 gi2.CreateMessageFieldsCity(rec, pack)
                         }
@@ -366,7 +367,7 @@ func (gi2 *GeoIp2Decoder) Decode(pack *PipelinePack) (packs []*PipelinePack, fai
                 if gi2.conn_db != nil {
                         rec, err := gi2.conn_db.ConnectionType(ip)
                         if err == nil &&
-                        (rec.ConnectionType != ""){
+                                (rec.ConnectionType != "") {
                                 found = true
                                 gi2.CreateMessageFieldsConnectionType(rec, pack)
                         }
@@ -374,12 +375,14 @@ func (gi2 *GeoIp2Decoder) Decode(pack *PipelinePack) (packs []*PipelinePack, fai
                 if gi2.isp_db != nil {
                         rec, err := gi2.isp_db.ISP(ip)
                         if err != nil ||
-                        (rec.AutonomousSystemNumber != 0 || rec.AutonomousSystemOrganization != "" || rec.ISP != "" || rec.Organization != ""){
+                                (rec.AutonomousSystemNumber != 0 || rec.AutonomousSystemOrganization != "" || rec.ISP != "" || rec.Organization != "") {
                                 found = true
                                 gi2.CreateMessageFieldsISP(rec, pack)
                         }
                 }
-                if found { break }
+                if found {
+                        break
+                }
         }
 
         packs = []*PipelinePack{pack}
@@ -421,4 +424,3 @@ func init() {
                 return new(GeoIp2Decoder)
         })
 }
-
